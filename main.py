@@ -1,6 +1,7 @@
 
 import os
 import json
+import traceback
 from pathlib import Path
 from aiohttp import web, ClientSession
 
@@ -90,13 +91,36 @@ def usage_keyboard():
 
 
 def load_phones():
+    print("Загрузка каталога:", CATALOG_PATH)
+
+    if not CATALOG_PATH.exists():
+        raise FileNotFoundError(
+            f"Файл phones.json не найден: {CATALOG_PATH}"
+        )
+
     with open(CATALOG_PATH, "r", encoding="utf-8") as file:
         data = json.load(file)
 
-    phones = data.get("phones", [])
+    if not isinstance(data, dict):
+        raise ValueError("Корень phones.json должен быть объектом")
+
+    phones = data.get("phones")
 
     if not isinstance(phones, list):
-        raise ValueError("Некорректный формат phones.json")
+        raise ValueError(
+            "В phones.json отсутствует список phones"
+        )
+
+    if not phones:
+        raise ValueError("Каталог смартфонов пуст")
+
+    for index, phone in enumerate(phones):
+        if not isinstance(phone, dict):
+            raise ValueError(
+                f"Некорректная запись смартфона №{index + 1}"
+            )
+
+    print("Каталог успешно загружен. Смартфонов:", len(phones))
 
     return phones
 
@@ -105,7 +129,7 @@ def recommend(budget, usage):
     phones = load_phones()
 
     keywords = {
-        "camera": ["фотографии", "камера", "портреты"],
+        "camera": ["фотографии", "камера", "портреты", "видео"],
         "games": ["игры", "производительность"],
         "battery": ["автономность"],
         "power": ["производительность", "скорость"],
@@ -118,11 +142,16 @@ def recommend(budget, usage):
         matched = []
 
         for phone in phones:
-            strengths = " ".join(
-                phone.get("strengths", [])
+            strengths = phone.get("strengths", [])
+
+            if not isinstance(strengths, list):
+                strengths = []
+
+            strengths_text = " ".join(
+                str(item) for item in strengths
             ).lower()
 
-            if any(word in strengths for word in selected):
+            if any(word in strengths_text for word in selected):
                 matched.append(phone)
     else:
         matched = phones
@@ -134,12 +163,13 @@ def recommend(budget, usage):
 
     for phone in matched[:4]:
         result.append(
-            f"{phone['brand']} {phone['model']}\n"
-            f"Процессор: {phone['processor']}\n"
-            f"Экран: {phone['display']}\n"
-            f"Камера: {phone['main_camera']}\n"
-            f"Батарея: {phone['battery']}\n"
-            f"Память: {phone['memory']}"
+            f"{phone.get('brand', 'Неизвестный бренд')} "
+            f"{phone.get('model', 'Неизвестная модель')}\n"
+            f"Процессор: {phone.get('processor', 'Не указан')}\n"
+            f"Экран: {phone.get('display', 'Не указан')}\n"
+            f"Камера: {phone.get('main_camera', 'Не указана')}\n"
+            f"Батарея: {phone.get('battery', 'Не указана')}\n"
+            f"Память: {phone.get('memory', 'Не указана')}"
         )
 
     return result
@@ -199,8 +229,10 @@ async def handle_callback(update):
                     "Попробуем подобрать ещё раз?"
                 )
 
-        except Exception as error:
-            print("Ошибка подбора:", error)
+        except Exception:
+            print("ОШИБКА ПРИ ПОДБОРЕ СМАРТФОНОВ:")
+            traceback.print_exc()
+
             result = (
                 "Не удалось загрузить каталог смартфонов. "
                 "Попробуй немного позже."
@@ -265,8 +297,9 @@ async def handle_update(request):
                     main_keyboard()
                 )
 
-    except Exception as error:
-        print("Ошибка обработки:", error)
+    except Exception:
+        print("ОШИБКА ОБРАБОТКИ TELEGRAM UPDATE:")
+        traceback.print_exc()
 
     return web.Response(text="OK")
 
@@ -301,6 +334,3 @@ app.on_startup.append(on_startup)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     web.run_app(app, host="0.0.0.0", port=port)
-
-        
-    
