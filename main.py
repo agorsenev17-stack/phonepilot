@@ -84,57 +84,50 @@ def usage_keyboard():
         ]
     ]
 
-
 def recommend(budget, usage):
-    catalog = {
-        "camera": [
-            "Google Pixel серии A",
-            "Google Pixel серии Pro",
-            "Samsung Galaxy S серии",
-            "iPhone серии Pro"
-        ],
-        "games": [
-            "POCO X серии",
-            "POCO F серии",
-            "OnePlus серии",
-            "RedMagic серии"
-        ],
-        "battery": [
-            "Xiaomi Redmi Note серии",
-            "Samsung Galaxy M серии",
-            "realme серии",
-            "HONOR серии"
-        ],
-        "power": [
-            "OnePlus серии",
-            "Xiaomi T серии",
-            "Samsung Galaxy S серии",
-            "iPhone серии Pro"
-        ],
-        "all": [
-            "Samsung Galaxy S серии",
-            "iPhone серии",
-            "Xiaomi серии",
-            "HONOR серии"
-        ]
+    with open("phones.json", "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    phones = data.get("phones", [])
+
+    keywords = {
+        "camera": ["камера", "фото", "портрет", "видео"],
+        "games": ["игры", "производительность", "скорость"],
+        "battery": ["автономность"],
+        "power": ["производительность", "скорость", "игры"],
+        "all": []
     }
 
-    models = catalog.get(usage, catalog["all"])
+    selected = keywords.get(usage, [])
 
-    if budget <= 15000:
-        models = [
-            "Xiaomi Redmi",
-            "POCO M серии",
-            "Samsung Galaxy A начального уровня"
+    if selected:
+        matched = [
+            phone for phone in phones
+            if any(
+                word in " ".join(phone.get("strengths", [])).lower()
+                for word in selected
+            )
         ]
-    elif budget <= 30000:
-        models = [
-            "POCO X серии",
-            "Samsung Galaxy A серии",
-            "Redmi Note серии"
-        ]
+    else:
+        matched = phones
 
-    return models[:4]
+    if not matched:
+        matched = phones
+
+    result = []
+
+    for phone in matched[:4]:
+        result.append(
+            f"{phone['brand']} {phone['model']}\n"
+            f"Процессор: {phone['processor']}\n"
+            f"Экран: {phone['display']}\n"
+            f"Камера: {phone['main_camera']}\n"
+            f"Батарея: {phone['battery']}\n"
+            f"Память: {phone['memory']}"
+        )
+
+    return result
+        
 
 
 async def handle_callback(update):
@@ -178,11 +171,10 @@ async def handle_callback(update):
             result += f"{number}. {model}\n"
 
         result += (
-            "\nЭто предварительная подборка серий, "
-            "а не конкретных моделей.\n\n"
-            "Скоро здесь появятся точные модели, "
-            "характеристики и актуальные цены.\n\n"
-            "Попробуем подобрать ещё раз?"
+    "\nПодборка составлена по назначению смартфона.\n"
+    "Цены и соответствие бюджету пока уточняются.\n\n"
+    "Попробуем подобрать ещё раз?"
+)
         )
 
         await send_message(
