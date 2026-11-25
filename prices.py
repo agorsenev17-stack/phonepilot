@@ -1,76 +1,80 @@
-import json
-import re
-from datetime import datetime, timezone
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-PRICES_FILE = BASE_DIR / "prices.json"
-
-PHONES = [
-    "iPhone 16",
-    "Galaxy S25",
-    "Xiaomi 15",
-    "POCO X7 Pro",
-    "OnePlus 13",
-    "Pixel 9",
-    "realme GT 7 Pro",
-    "HONOR 200 Pro",
-]
+import asyncio
+import aiohttp
 
 
-def calculate_average(prices):
-    valid = [
-        price for price in prices
-        if isinstance(price, (int, float))
-        and 1000 <= price <= 500000
-    ]
-
-    if not valid:
-        return None
-
-    valid.sort()
-
-    if len(valid) >= 5:
-        valid = valid[1:-1]
-
-    return round(sum(valid) / len(valid))
+URL = "https://search.wb.ru/exactmatch/ru/common/v9/search"
 
 
-def save_prices(data):
-    result = {
-        "updated_at": datetime.now(
-            timezone.utc
-        ).isoformat(),
-        "phones": data,
+async def search_phone(session, query):
+    params = {
+        "ab_testing": "false",
+        "appType": "1",
+        "curr": "rub",
+        "dest": "-1257786",
+        "query": query,
+        "resultset": "catalog",
+        "sort": "popular",
+        "spp": "30",
+        "suppressSpellcheck": "false",
     }
 
-    PRICES_FILE.write_text(
-        json.dumps(
-            result,
-            ensure_ascii=False,
-            indent=2
-        ),
-        encoding="utf-8"
-    )
-
-
-def load_prices():
-    if not PRICES_FILE.exists():
-        return {}
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }
 
     try:
-        data = json.loads(
-            PRICES_FILE.read_text(encoding="utf-8")
-        )
-        return data.get("phones", {})
-    except (json.JSONDecodeError, OSError):
-        return {}
+        async with session.get(
+            URL,
+            params=params,
+            headers=headers,
+            timeout=20
+        ) as response:
+
+            print("Запрос:", query)
+            print("HTTP:", response.status)
+
+            if response.status != 200:
+                return
+
+            data = await response.json()
+
+            products = data.get("data", {}).get("products", [])
+
+            for product in products[:5]:
+                name = product.get("name", "Без названия")
+                price_data = product.get("sizes", [])
+
+                if price_data:
+                    price = (
+                        price_data[0]
+                        .get("price", {})
+                        .get("product", 0)
+                    )
+                    price = price / 100
+                else:
+                    price = 0
+
+                print(name, "-", price, "₽")
+
+    except Exception as error:
+        print("Ошибка:", error)
 
 
-def get_price(model):
-    return load_prices().get(model, {}).get("average")
+async def main():
+    async with aiohttp.ClientSession() as session:
+
+        phones = [
+            "Apple iPhone 16 128GB",
+            "Samsung Galaxy S25 128GB",
+            "Xiaomi 15 256GB",
+            "POCO X7 Pro 256GB",
+        ]
+
+        for phone in phones:
+            await search_phone(session, phone)
+            await asyncio.sleep(2)
 
 
 if __name__ == "__main__":
-    print("PhonePilot: модуль цен готов.")
-    print("Моделей в каталоге:", len(PHONES))
+    asyncio.run(main())
