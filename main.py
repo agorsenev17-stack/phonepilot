@@ -1,16 +1,15 @@
 
 import os
 import json
-import secrets
+from pathlib import Path
 from aiohttp import web, ClientSession
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-WEBHOOK_SECRET = os.environ.get(
-    "WEBHOOK_SECRET",
-    secrets.token_urlsafe(32)
-)
+WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
+
+CATALOG_PATH = Path(__file__).parent / "phones.json"
 
 users = {}
 
@@ -21,7 +20,12 @@ async def telegram(method, data):
             f"{BASE_URL}/{method}",
             json=data
         ) as response:
-            return await response.json()
+            result = await response.json()
+
+            if not result.get("ok"):
+                print("Telegram API error:", result)
+
+            return result
 
 
 async def send_message(chat_id, text, keyboard=None):
@@ -41,13 +45,13 @@ async def send_message(chat_id, text, keyboard=None):
 def main_keyboard():
     return [
         [
-            {"text": "📱 Подобрать телефон", "callback_data": "start"},
+            {"text": "📱 Подобрать телефон", "callback_data": "start"}
         ],
         [
-            {"text": "⚖️ Сравнить модели", "callback_data": "compare"},
+            {"text": "⚖️ Сравнить модели", "callback_data": "compare"}
         ],
         [
-            {"text": "💰 Стоит ли покупать?", "callback_data": "worth"},
+            {"text": "💰 Стоит ли покупать?", "callback_data": "worth"}
         ]
     ]
 
@@ -84,30 +88,42 @@ def usage_keyboard():
         ]
     ]
 
-def recommend(budget, usage):
-    with open("phones.json", "r", encoding="utf-8") as file:
+
+def load_phones():
+    with open(CATALOG_PATH, "r", encoding="utf-8") as file:
         data = json.load(file)
 
     phones = data.get("phones", [])
 
+    if not isinstance(phones, list):
+        raise ValueError("Некорректный формат phones.json")
+
+    return phones
+
+
+def recommend(budget, usage):
+    phones = load_phones()
+
     keywords = {
-        "camera": ["камера", "фото", "портрет", "видео"],
-        "games": ["игры", "производительность", "скорость"],
+        "camera": ["фотографии", "камера", "портреты"],
+        "games": ["игры", "производительность"],
         "battery": ["автономность"],
-        "power": ["производительность", "скорость", "игры"],
+        "power": ["производительность", "скорость"],
         "all": []
     }
 
     selected = keywords.get(usage, [])
 
     if selected:
-        matched = [
-            phone for phone in phones
-            if any(
-                word in " ".join(phone.get("strengths", [])).lower()
-                for word in selected
-            )
-        ]
+        matched = []
+
+        for phone in phones:
+            strengths = " ".join(
+                phone.get("strengths", [])
+            ).lower()
+
+            if any(word in strengths for word in selected):
+                matched.append(phone)
     else:
         matched = phones
 
@@ -127,7 +143,6 @@ def recommend(budget, usage):
         )
 
     return result
-        
 
 
 async def handle_callback(update):
@@ -142,6 +157,7 @@ async def handle_callback(update):
 
     if action == "start":
         users[user_id] = {}
+
         await send_message(
             chat_id,
             "💰 Какой у тебя бюджет на смартфон?",
@@ -150,6 +166,7 @@ async def handle_callback(update):
 
     elif action.startswith("budget:"):
         budget = int(action.split(":")[1])
+
         users.setdefault(user_id, {})["budget"] = budget
 
         await send_message(
@@ -160,22 +177,34 @@ async def handle_callback(update):
 
     elif action.startswith("usage:"):
         usage = action.split(":")[1]
+
         user = users.get(user_id, {})
         budget = user.get("budget", 999999)
 
-        models = recommend(budget, usage)
+        try:
+            models = recommend(budget, usage)
 
-        result = "🎯 ТВОЯ ПОДБОРКА СМАРТФОНОВ\n\n"
+            if not models:
+                result = "Пока не нашёл подходящих смартфонов."
 
-        for number, model in enumerate(models, 1):
-            result += f"{number}. {model}\n"
+            else:
+                result = "🎯 ТВОЯ ПОДБОРКА СМАРТФОНОВ\n\n"
 
-        result += (
-    "\nПодборка составлена по назначению смартфона.\n"
-    "Цены и соответствие бюджету пока уточняются.\n\n"
-    "Попробуем подобрать ещё раз?"
-)
-        )
+                for number, model in enumerate(models, 1):
+                    result += f"{number}. {model}\n\n"
+
+                result += (
+                    "Подборка составлена по назначению смартфона.\n"
+                    "Цены и соответствие бюджету пока уточняются.\n\n"
+                    "Попробуем подобрать ещё раз?"
+                )
+
+        except Exception as error:
+            print("Ошибка подбора:", error)
+            result = (
+                "Не удалось загрузить каталог смартфонов. "
+                "Попробуй немного позже."
+            )
 
         await send_message(
             chat_id,
@@ -187,7 +216,7 @@ async def handle_callback(update):
         await send_message(
             chat_id,
             "⚖️ Функция сравнения готовится!\n\n"
-            "Скоро ты сможешь сравнивать смартфоны "
+            "Скоро можно будет сравнивать смартфоны "
             "по камере, процессору, батарее и другим параметрам.",
             main_keyboard()
         )
@@ -228,6 +257,7 @@ async def handle_update(request):
                     "Начнём?",
                     main_keyboard()
                 )
+
             else:
                 await send_message(
                     chat_id,
@@ -250,16 +280,27 @@ async def on_startup(app):
             "secret_token": WEBHOOK_SECRET,
             "allowed_updates": ["message", "callback_query"]
         })
+
         print("Webhook:", result)
 
 
 app = web.Application()
+
 app.router.add_post("/webhook", handle_update)
-app.router.add_get("/", lambda request: web.Response(
-    text="PhonePilot is running!"
-))
+
+app.router.add_get(
+    "/",
+    lambda request: web.Response(
+        text="PhonePilot is running!"
+    )
+)
+
 app.on_startup.append(on_startup)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     web.run_app(app, host="0.0.0.0", port=port)
+
+        
+    
