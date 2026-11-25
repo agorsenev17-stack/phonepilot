@@ -1,19 +1,106 @@
-
 import os
-import json
 import traceback
-from pathlib import Path
 from aiohttp import web, ClientSession
 
+
 TOKEN = os.environ["TELEGRAM_TOKEN"]
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 
-BASE_DIR = Path(__file__).resolve().parent
-CATALOG_PATH = BASE_DIR / "phones.json"
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-users = {}
+PORT = int(os.environ.get("PORT", 10000))
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
+user_budgets = {}
+
+
+# КАТАЛОГ СМАРТФОНОВ
+
+PHONES = [
+    {
+        "brand": "Apple",
+        "model": "iPhone 16",
+        "processor": "Apple A18",
+        "display": "6.1 OLED",
+        "battery": "3561 мА·ч",
+        "main_camera": "48 МП",
+        "memory": "128/256/512 ГБ",
+        "strengths": ["Видео", "Производительность", "Экосистема"]
+    },
+    {
+        "brand": "Samsung",
+        "model": "Galaxy S25",
+        "processor": "Snapdragon 8 Elite",
+        "display": "6.2 AMOLED 120 Гц",
+        "battery": "4000 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "128/256/512 ГБ",
+        "strengths": ["Камера", "Компактность", "Универсальность"]
+    },
+    {
+        "brand": "Xiaomi",
+        "model": "Xiaomi 15",
+        "processor": "Snapdragon 8 Elite",
+        "display": "6.36 AMOLED 120 Гц",
+        "battery": "5240 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "256/512 ГБ",
+        "strengths": ["Камера", "Производительность", "Экран"]
+    },
+    {
+        "brand": "POCO",
+        "model": "POCO X7 Pro",
+        "processor": "Dimensity 8400 Ultra",
+        "display": "6.67 AMOLED 120 Гц",
+        "battery": "6000 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "256/512 ГБ",
+        "strengths": ["Игры", "Автономность", "Производительность"]
+    },
+    {
+        "brand": "OnePlus",
+        "model": "OnePlus 13",
+        "processor": "Snapdragon 8 Elite",
+        "display": "6.82 AMOLED 120 Гц",
+        "battery": "6000 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "256/512 ГБ/1 ТБ",
+        "strengths": ["Скорость", "Экран", "Автономность"]
+    },
+    {
+        "brand": "Google",
+        "model": "Pixel 9",
+        "processor": "Google Tensor G4",
+        "display": "6.3 OLED 120 Гц",
+        "battery": "4700 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "128/256 ГБ",
+        "strengths": ["Фотографии", "Чистый Android", "ИИ-функции"]
+    },
+    {
+        "brand": "realme",
+        "model": "GT 7 Pro",
+        "processor": "Snapdragon 8 Elite",
+        "display": "6.78 AMOLED 120 Гц",
+        "battery": "6500 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "256/512 ГБ",
+        "strengths": ["Игры", "Автономность", "Производительность"]
+    },
+    {
+        "brand": "HONOR",
+        "model": "200 Pro",
+        "processor": "Snapdragon 8s Gen 3",
+        "display": "6.78 OLED 120 Гц",
+        "battery": "5200 мА·ч",
+        "main_camera": "50 МП",
+        "memory": "512 ГБ",
+        "strengths": ["Портреты", "Камера", "Дизайн"]
+    }
+]
+
+
+# ОТПРАВКА ЗАПРОСОВ TELEGRAM
 
 async def telegram(method, data):
     async with ClientSession() as session:
@@ -24,291 +111,309 @@ async def telegram(method, data):
             result = await response.json()
 
             if not result.get("ok"):
-                print("Telegram API error:", result)
+                print("Ошибка Telegram API:", result)
 
             return result
 
 
-async def send_message(chat_id, text, keyboard=None):
-    data = {
-        "chat_id": chat_id,
-        "text": text
+# ГЛАВНОЕ МЕНЮ
+
+async def show_start(chat_id):
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "📱 Подобрать телефон",
+                    "callback_data": "start"
+                }
+            ]
+        ]
     }
 
-    if keyboard:
-        data["reply_markup"] = {
-            "inline_keyboard": keyboard
-        }
-
-    await telegram("sendMessage", data)
-
-
-def main_keyboard():
-    return [
-        [{"text": "📱 Подобрать телефон", "callback_data": "start"}],
-        [{"text": "⚖️ Сравнить модели", "callback_data": "compare"}],
-        [{"text": "💰 Стоит ли покупать?", "callback_data": "worth"}]
-    ]
+    await telegram("sendMessage", {
+        "chat_id": chat_id,
+        "text": (
+            "👋 Добро пожаловать в PhonePilot!\n\n"
+            "Я помогу подобрать смартфон под твои задачи "
+            "и бюджет.\n\n"
+            "Нажми кнопку ниже, чтобы начать."
+        ),
+        "reply_markup": keyboard
+    })
 
 
-def budget_keyboard():
-    return [
-        [
-            {"text": "До 15 000 ₽", "callback_data": "budget:15000"},
-            {"text": "15–30 тыс. ₽", "callback_data": "budget:30000"}
-        ],
-        [
-            {"text": "30–50 тыс. ₽", "callback_data": "budget:50000"},
-            {"text": "50–80 тыс. ₽", "callback_data": "budget:80000"}
-        ],
-        [
-            {"text": "80–120 тыс. ₽", "callback_data": "budget:120000"},
-            {"text": "Бюджет не важен", "callback_data": "budget:999999"}
+# ВЫБОР БЮДЖЕТА
+
+async def show_budgets(chat_id):
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "До 15 000 ₽", "callback_data": "budget:15000"},
+                {"text": "До 30 000 ₽", "callback_data": "budget:30000"}
+            ],
+            [
+                {"text": "До 50 000 ₽", "callback_data": "budget:50000"},
+                {"text": "До 80 000 ₽", "callback_data": "budget:80000"}
+            ],
+            [
+                {"text": "До 120 000 ₽", "callback_data": "budget:120000"},
+                {"text": "Бюджет не ограничен", "callback_data": "budget:999999"}
+            ]
         ]
-    ]
+    }
+
+    await telegram("sendMessage", {
+        "chat_id": chat_id,
+        "text": "💰 Какой у тебя бюджет на смартфон?",
+        "reply_markup": keyboard
+    })
 
 
-def usage_keyboard():
-    return [
-        [
-            {"text": "📸 Камера", "callback_data": "usage:camera"},
-            {"text": "🎮 Игры", "callback_data": "usage:games"}
-        ],
-        [
-            {"text": "🔋 Батарея", "callback_data": "usage:battery"},
-            {"text": "⚡ Производительность", "callback_data": "usage:power"}
-        ],
-        [{"text": "🌟 Универсальный", "callback_data": "usage:all"}]
-    ]
+# ВЫБОР НАЗНАЧЕНИЯ
+
+async def show_usage(chat_id):
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "📸 Камера и фотографии", "callback_data": "usage:camera"}
+            ],
+            [
+                {"text": "🎮 Игры", "callback_data": "usage:games"}
+            ],
+            [
+                {"text": "🔋 Автономность", "callback_data": "usage:battery"}
+            ],
+            [
+                {"text": "⚡ Производительность", "callback_data": "usage:power"}
+            ],
+            [
+                {"text": "🌟 Для всего", "callback_data": "usage:all"}
+            ]
+        ]
+    }
+
+    await telegram("sendMessage", {
+        "chat_id": chat_id,
+        "text": "🎯 Для чего тебе нужен смартфон?",
+        "reply_markup": keyboard
+    })
 
 
-def load_phones():
-    print("Путь к каталогу:", CATALOG_PATH)
-    print("Каталог существует:", CATALOG_PATH.exists())
-
-    if not CATALOG_PATH.exists():
-        raise FileNotFoundError(
-            f"Не найден файл: {CATALOG_PATH}"
-        )
-
-    with open(CATALOG_PATH, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    if not isinstance(data, dict):
-        raise ValueError("Корень JSON должен быть объектом")
-
-    phones = data.get("phones")
-
-    if not isinstance(phones, list):
-        raise ValueError(
-            "В JSON отсутствует список phones"
-        )
-
-    if not phones:
-        raise ValueError("Каталог пуст")
-
-    print("Количество смартфонов:", len(phones))
-
-    return phones
-
+# ПОДБОР СМАРТФОНОВ
 
 def recommend(budget, usage):
-    phones = load_phones()
 
     keywords = {
-        "camera": ["фотографии", "камера", "портреты", "видео"],
-        "games": ["игры", "производительность"],
-        "battery": ["автономность"],
-        "power": ["производительность", "скорость"],
+        "camera": [
+            "фотографии", "камера", "портреты", "видео"
+        ],
+        "games": [
+            "игры", "производительность"
+        ],
+        "battery": [
+            "автономность"
+        ],
+        "power": [
+            "производительность", "скорость"
+        ],
         "all": []
     }
 
-    selected = keywords.get(usage, [])
+    suitable = []
 
-    if selected:
-        matched = []
+    for phone in PHONES:
 
-        for phone in phones:
-            strengths = phone.get("strengths", [])
+        strengths = phone["strengths"]
 
-            if not isinstance(strengths, list):
-                strengths = []
+        if usage == "all":
+            suitable.append(phone)
+            continue
 
-            strengths = " ".join(
-                str(item) for item in strengths
-            ).lower()
+        score = 0
 
-            if any(word in strengths for word in selected):
-                matched.append(phone)
-    else:
-        matched = phones
+        for strength in strengths:
+            for keyword in keywords[usage]:
+                if keyword.lower() in strength.lower():
+                    score += 1
 
-    if not matched:
-        matched = phones
+        if score > 0:
+            suitable.append(phone)
 
-    result = []
+    if not suitable:
+        suitable = PHONES
 
-    for phone in matched[:4]:
-        result.append(
-            f"{phone.get('brand', 'Неизвестно')} "
-            f"{phone.get('model', 'Неизвестная модель')}\n"
-            f"Процессор: {phone.get('processor', 'Не указан')}\n"
-            f"Экран: {phone.get('display', 'Не указан')}\n"
-            f"Камера: {phone.get('main_camera', 'Не указана')}\n"
-            f"Батарея: {phone.get('battery', 'Не указана')}\n"
-            f"Память: {phone.get('memory', 'Не указана')}"
+    result = (
+        "🤖 **Результаты PhonePilot**\n\n"
+        f"💰 Твой бюджет: до {budget:,} ₽\n\n"
+    )
+
+    result = result.replace(",", " ")
+
+    result += "Вот смартфоны, которые стоит рассмотреть:\n\n"
+
+    for phone in suitable[:4]:
+
+        result += (
+            f"📱 **{phone['brand']} {phone['model']}**\n"
+            f"⚙️ Процессор: {phone['processor']}\n"
+            f"🖥 Экран: {phone['display']}\n"
+            f"🔋 Аккумулятор: {phone['battery']}\n"
+            f"📷 Камера: {phone['main_camera']}\n"
+            f"💾 Память: {phone['memory']}\n"
+            f"⭐ Сильные стороны: {', '.join(phone['strengths'])}\n\n"
         )
+
+    result += (
+        "ℹ️ Пока каталог не содержит актуальных цен, "
+        "поэтому бюджет используется как ориентир, "
+        "а не как точный фильтр по стоимости.\n\n"
+        "Выбирай смартфон с учётом своих задач."
+    )
 
     return result
 
 
-async def handle_callback(update):
-    query = update["callback_query"]
-    chat_id = query["message"]["chat"]["id"]
-    user_id = query["from"]["id"]
-    action = query["data"]
+# ОБРАБОТКА КНОПОК
+
+async def handle_callback(callback):
+
+    callback_id = callback["id"]
+    data = callback.get("data", "")
+    chat_id = callback["message"]["chat"]["id"]
+    user_id = callback["from"]["id"]
 
     await telegram("answerCallbackQuery", {
-        "callback_query_id": query["id"]
+        "callback_query_id": callback_id
     })
 
-    if action == "start":
-        users[user_id] = {}
+    try:
 
-        await send_message(
-            chat_id,
-            "💰 Какой у тебя бюджет на смартфон?",
-            budget_keyboard()
-        )
+        if data == "start":
+            await show_budgets(chat_id)
 
-    elif action.startswith("budget:"):
-        budget = int(action.split(":")[1])
-        users.setdefault(user_id, {})["budget"] = budget
+        elif data.startswith("budget:"):
 
-        await send_message(
-            chat_id,
-            "Отлично! А что для тебя важнее всего?",
-            usage_keyboard()
-        )
+            budget = int(data.split(":")[1])
+            user_budgets[user_id] = budget
 
-    elif action.startswith("usage:"):
-        usage = action.split(":")[1]
-        budget = users.get(user_id, {}).get("budget", 999999)
+            await show_usage(chat_id)
 
-        try:
-            models = recommend(budget, usage)
+        elif data.startswith("usage:"):
 
-            if not models:
-                result = "Пока не нашёл подходящих смартфонов."
-            else:
-                result = "🎯 ТВОЯ ПОДБОРКА СМАРТФОНОВ\n\n"
+            usage = data.split(":")[1]
+            budget = user_budgets.get(user_id, 30000)
 
-                for number, model in enumerate(models, 1):
-                    result += f"{number}. {model}\n\n"
+            result = recommend(budget, usage)
 
-                result += (
-                    "Подборка составлена по назначению смартфона.\n"
-                    "Цены и соответствие бюджету пока уточняются.\n\n"
-                    "Попробуем подобрать ещё раз?"
-                )
+            await telegram("sendMessage", {
+                "chat_id": chat_id,
+                "text": result,
+                "parse_mode": "Markdown"
+            })
 
-        except Exception as error:
-            print("ОШИБКА ПОДБОРА:")
-            traceback.print_exc()
+            await telegram("sendMessage", {
+                "chat_id": chat_id,
+                "text": "Хочешь подобрать другой смартфон?",
+                "reply_markup": {
+                    "inline_keyboard": [
+                        [
+                            {
+                                "text": "🔄 Подобрать ещё раз",
+                                "callback_data": "start"
+                            }
+                        ]
+                    ]
+                }
+            })
 
-            result = (
-                "❌ Ошибка каталога:\n"
+    except Exception as error:
+
+        print("ОШИБКА ПОДБОРА:")
+        traceback.print_exc()
+
+        await telegram("sendMessage", {
+            "chat_id": chat_id,
+            "text": (
+                "❌ Произошла ошибка:\n"
                 f"{type(error).__name__}: {error}"
             )
-
-        await send_message(
-            chat_id,
-            result,
-            main_keyboard()
-        )
-
-    elif action == "compare":
-        await send_message(
-            chat_id,
-            "⚖️ Функция сравнения готовится!",
-            main_keyboard()
-        )
-
-    elif action == "worth":
-        await send_message(
-            chat_id,
-            "💰 Скоро PhonePilot сможет оценивать "
-            "выгодность покупки смартфона.",
-            main_keyboard()
-        )
+        })
 
 
-async def handle_update(request):
-    if request.headers.get(
+# ОБРАБОТКА СООБЩЕНИЙ
+
+async def handle_message(message):
+
+    text = message.get("text", "")
+    chat_id = message["chat"]["id"]
+
+    if text == "/start":
+        await show_start(chat_id)
+
+
+# WEBHOOK
+
+async def webhook(request):
+
+    secret = request.headers.get(
         "X-Telegram-Bot-Api-Secret-Token"
-    ) != WEBHOOK_SECRET:
-        raise web.HTTPForbidden()
+    )
+
+    if secret != WEBHOOK_SECRET:
+        return web.Response(status=403)
 
     try:
         update = await request.json()
 
-        if "callback_query" in update:
-            await handle_callback(update)
+        if "message" in update:
+            await handle_message(update["message"])
 
-        elif "message" in update:
-            message = update["message"]
-            chat_id = message["chat"]["id"]
-            message_text = message.get("text", "")
-
-            if message_text.startswith("/start"):
-                await send_message(
-                    chat_id,
-                    "👋 Привет! Я PhonePilot.\n\n"
-                    "Помогу выбрать смартфон под твои задачи.\n\n"
-                    "Начнём?",
-                    main_keyboard()
-                )
-            else:
-                await send_message(
-                    chat_id,
-                    "Выбери нужную функцию в меню 👇",
-                    main_keyboard()
-                )
+        elif "callback_query" in update:
+            await handle_callback(update["callback_query"])
 
     except Exception:
-        print("ОШИБКА ОБРАБОТКИ:")
         traceback.print_exc()
 
     return web.Response(text="OK")
 
 
+# ПРОВЕРКА РАБОТЫ СЕРВЕРА
+
+async def health(request):
+    return web.Response(text="PhonePilot is running!")
+
+
+# УСТАНОВКА WEBHOOK
+
 async def on_startup(app):
-    render_url = os.environ.get("RENDER_EXTERNAL_URL")
 
-    if render_url:
-        result = await telegram("setWebhook", {
-            "url": f"{render_url}/webhook",
-            "secret_token": WEBHOOK_SECRET,
-            "allowed_updates": ["message", "callback_query"]
-        })
+    if not RENDER_URL:
+        print("RENDER_EXTERNAL_URL не найден")
+        return
 
-        print("Webhook:", result)
+    webhook_url = f"{RENDER_URL}/webhook"
 
+    result = await telegram("setWebhook", {
+        "url": webhook_url,
+        "secret_token": WEBHOOK_SECRET
+    })
+
+    print("Установка webhook:", result)
+
+
+# ЗАПУСК СЕРВЕРА
 
 app = web.Application()
 
-app.router.add_post("/webhook", handle_update)
-
-app.router.add_get(
-    "/",
-    lambda request: web.Response(
-        text="PhonePilot is running!"
-    )
-)
+app.router.add_get("/", health)
+app.router.add_post("/webhook", webhook)
 
 app.on_startup.append(on_startup)
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    web.run_app(app, host="0.0.0.0", port=port)
+    web.run_app(
+        app,
+        host="0.0.0.0",
+        port=PORT
+    )
