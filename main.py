@@ -7,10 +7,10 @@ from aiohttp import web, ClientSession
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
-
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 
-CATALOG_PATH = Path(__file__).parent / "phones.json"
+BASE_DIR = Path(__file__).resolve().parent
+CATALOG_PATH = BASE_DIR / "phones.json"
 
 users = {}
 
@@ -45,15 +45,9 @@ async def send_message(chat_id, text, keyboard=None):
 
 def main_keyboard():
     return [
-        [
-            {"text": "📱 Подобрать телефон", "callback_data": "start"}
-        ],
-        [
-            {"text": "⚖️ Сравнить модели", "callback_data": "compare"}
-        ],
-        [
-            {"text": "💰 Стоит ли покупать?", "callback_data": "worth"}
-        ]
+        [{"text": "📱 Подобрать телефон", "callback_data": "start"}],
+        [{"text": "⚖️ Сравнить модели", "callback_data": "compare"}],
+        [{"text": "💰 Стоит ли покупать?", "callback_data": "worth"}]
     ]
 
 
@@ -84,43 +78,36 @@ def usage_keyboard():
             {"text": "🔋 Батарея", "callback_data": "usage:battery"},
             {"text": "⚡ Производительность", "callback_data": "usage:power"}
         ],
-        [
-            {"text": "🌟 Универсальный", "callback_data": "usage:all"}
-        ]
+        [{"text": "🌟 Универсальный", "callback_data": "usage:all"}]
     ]
 
 
 def load_phones():
-    print("Загрузка каталога:", CATALOG_PATH)
+    print("Путь к каталогу:", CATALOG_PATH)
+    print("Каталог существует:", CATALOG_PATH.exists())
 
     if not CATALOG_PATH.exists():
         raise FileNotFoundError(
-            f"Файл phones.json не найден: {CATALOG_PATH}"
+            f"Не найден файл: {CATALOG_PATH}"
         )
 
     with open(CATALOG_PATH, "r", encoding="utf-8") as file:
         data = json.load(file)
 
     if not isinstance(data, dict):
-        raise ValueError("Корень phones.json должен быть объектом")
+        raise ValueError("Корень JSON должен быть объектом")
 
     phones = data.get("phones")
 
     if not isinstance(phones, list):
         raise ValueError(
-            "В phones.json отсутствует список phones"
+            "В JSON отсутствует список phones"
         )
 
     if not phones:
-        raise ValueError("Каталог смартфонов пуст")
+        raise ValueError("Каталог пуст")
 
-    for index, phone in enumerate(phones):
-        if not isinstance(phone, dict):
-            raise ValueError(
-                f"Некорректная запись смартфона №{index + 1}"
-            )
-
-    print("Каталог успешно загружен. Смартфонов:", len(phones))
+    print("Количество смартфонов:", len(phones))
 
     return phones
 
@@ -147,11 +134,11 @@ def recommend(budget, usage):
             if not isinstance(strengths, list):
                 strengths = []
 
-            strengths_text = " ".join(
+            strengths = " ".join(
                 str(item) for item in strengths
             ).lower()
 
-            if any(word in strengths_text for word in selected):
+            if any(word in strengths for word in selected):
                 matched.append(phone)
     else:
         matched = phones
@@ -163,7 +150,7 @@ def recommend(budget, usage):
 
     for phone in matched[:4]:
         result.append(
-            f"{phone.get('brand', 'Неизвестный бренд')} "
+            f"{phone.get('brand', 'Неизвестно')} "
             f"{phone.get('model', 'Неизвестная модель')}\n"
             f"Процессор: {phone.get('processor', 'Не указан')}\n"
             f"Экран: {phone.get('display', 'Не указан')}\n"
@@ -196,7 +183,6 @@ async def handle_callback(update):
 
     elif action.startswith("budget:"):
         budget = int(action.split(":")[1])
-
         users.setdefault(user_id, {})["budget"] = budget
 
         await send_message(
@@ -207,16 +193,13 @@ async def handle_callback(update):
 
     elif action.startswith("usage:"):
         usage = action.split(":")[1]
-
-        user = users.get(user_id, {})
-        budget = user.get("budget", 999999)
+        budget = users.get(user_id, {}).get("budget", 999999)
 
         try:
             models = recommend(budget, usage)
 
             if not models:
                 result = "Пока не нашёл подходящих смартфонов."
-
             else:
                 result = "🎯 ТВОЯ ПОДБОРКА СМАРТФОНОВ\n\n"
 
@@ -229,13 +212,13 @@ async def handle_callback(update):
                     "Попробуем подобрать ещё раз?"
                 )
 
-        except Exception:
-            print("ОШИБКА ПРИ ПОДБОРЕ СМАРТФОНОВ:")
+        except Exception as error:
+            print("ОШИБКА ПОДБОРА:")
             traceback.print_exc()
 
             result = (
-                "Не удалось загрузить каталог смартфонов. "
-                "Попробуй немного позже."
+                "❌ Ошибка каталога:\n"
+                f"{type(error).__name__}: {error}"
             )
 
         await send_message(
@@ -247,18 +230,15 @@ async def handle_callback(update):
     elif action == "compare":
         await send_message(
             chat_id,
-            "⚖️ Функция сравнения готовится!\n\n"
-            "Скоро можно будет сравнивать смартфоны "
-            "по камере, процессору, батарее и другим параметрам.",
+            "⚖️ Функция сравнения готовится!",
             main_keyboard()
         )
 
     elif action == "worth":
         await send_message(
             chat_id,
-            "💰 Скоро можно будет отправить модель "
-            "и цену, а PhonePilot оценит, "
-            "стоит ли покупать этот смартфон.",
+            "💰 Скоро PhonePilot сможет оценивать "
+            "выгодность покупки смартфона.",
             main_keyboard()
         )
 
@@ -278,18 +258,16 @@ async def handle_update(request):
         elif "message" in update:
             message = update["message"]
             chat_id = message["chat"]["id"]
-            text = message.get("text", "")
+            message_text = message.get("text", "")
 
-            if text.startswith("/start"):
+            if message_text.startswith("/start"):
                 await send_message(
                     chat_id,
                     "👋 Привет! Я PhonePilot.\n\n"
-                    "Помогу выбрать смартфон "
-                    "под твои задачи и бюджет.\n\n"
+                    "Помогу выбрать смартфон под твои задачи.\n\n"
                     "Начнём?",
                     main_keyboard()
                 )
-
             else:
                 await send_message(
                     chat_id,
@@ -298,7 +276,7 @@ async def handle_update(request):
                 )
 
     except Exception:
-        print("ОШИБКА ОБРАБОТКИ TELEGRAM UPDATE:")
+        print("ОШИБКА ОБРАБОТКИ:")
         traceback.print_exc()
 
     return web.Response(text="OK")
