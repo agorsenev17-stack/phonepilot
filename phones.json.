@@ -1,0 +1,84 @@
+{
+  "phones": [
+    {
+      "brand": "Apple",
+      "model": "iPhone 16",
+      "processor": "Apple A18",
+      "display": "6.1 OLED",
+      "battery": "3561 мА·ч",
+      "main_camera": "48 МП",
+      "memory": "128/256/512 ГБ",
+      "strengths": ["Видео", "Производительность", "Экосистема"]
+    },
+    {
+      "brand": "Samsung",
+      "model": "Galaxy S25",
+      "processor": "Snapdragon 8 Elite",
+      "display": "6.2 AMOLED 120 Гц",
+      "battery": "4000 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "128/256/512 ГБ",
+      "strengths": ["Камера", "Компактность", "Универсальность"]
+    },
+    {
+      "brand": "Xiaomi",
+      "model": "Xiaomi 15",
+      "processor": "Snapdragon 8 Elite",
+      "display": "6.36 AMOLED 120 Гц",
+      "battery": "5240 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "256/512 ГБ",
+      "strengths": ["Камера", "Производительность", "Экран"]
+    },
+    {
+      "brand": "POCO",
+      "model": "POCO X7 Pro",
+      "processor": "Dimensity 8400 Ultra",
+      "display": "6.67 AMOLED 120 Гц",
+      "battery": "6000 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "256/512 ГБ",
+      "strengths": ["Игры", "Автономность", "Производительность"]
+    },
+    {
+      "brand": "OnePlus",
+      "model": "OnePlus 13",
+      "processor": "Snapdragon 8 Elite",
+      "display": "6.82 AMOLED 120 Гц",
+      "battery": "6000 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "256/512 ГБ/1 ТБ",
+      "strengths": ["Скорость", "Экран", "Автономность"]
+    },
+    {
+      "brand": "Google",
+      "model": "Pixel 9",
+      "processor": "Google Tensor G4",
+      "display": "6.3 OLED 120 Гц",
+      "battery": "4700 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "128/256 ГБ",
+      "strengths": ["Фотографии", "Чистый Android", "ИИ-функции"]
+    },
+    {
+      "brand": "realme",
+      "model": "GT 7 Pro",
+      "processor": "Snapdragon 8 Elite",
+      "display": "6.78 AMOLED 120 Гц",
+      "battery": "6500 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "256/512 ГБ",
+      "strengths": ["Игры", "Автономность", "Производительность"]
+    },
+    {
+      "brand": "HONOR",
+      "model": "200 Pro",
+      "processor": "Snapdragon 8s Gen 3",
+      "display": "6.78 OLED 120 Гц",
+      "battery": "5200 мА·ч",
+      "main_camera": "50 МП",
+      "memory": "512 ГБ",
+      "strengths": ["Портреты", "Камера", "Дизайн"]
+    }
+  ]
+}
